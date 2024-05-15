@@ -4,9 +4,7 @@ from flask import Flask, render_template, request, send_file
 from fpdf import FPDF
 
 # --- Tax Calculation Function ---
-
 def calculate_tax(income):
-    """Calculates income tax based on Australian tax brackets (2023-2024)."""
     if 0 <= income <= 18200:
         return 0
     elif 18201 <= income <= 45000:
@@ -18,8 +16,8 @@ def calculate_tax(income):
     else:
         return 51667 + 0.45 * (income - 180000)
 
-# --- Flask Application Setup ---
 
+# --- Flask Application Setup ---
 app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
@@ -56,13 +54,12 @@ def payslip_form():
 
 
 # --- Payslip Generation Function ---
-
 def generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income):
     super_rate = 0.11  
     today = date.today()
     financial_year_start = date(today.year - 1, 7, 1)
-    pay_period_end = today - timedelta(days=today.weekday() + 1)  # End of the most recent pay period (Sunday)
-    fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1  # Fortnights elapsed in the financial year
+    pay_period_end = today - timedelta(days=today.weekday() + 1)  
+    original_fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1
 
     pdf = FPDF()  
 
@@ -70,16 +67,18 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
     for _ in range(num_payslips):
         pay_period_start = pay_period_end - timedelta(days=13)  # Start of this pay period
 
-        # Calculations (same as before)
+        # Calculations 
         fortnightly_gross = annual_income / 26
-        ytd_taxable_income = (annual_income - (annual_income * super_rate)) * fortnights_since_fy_start / 26
+        # Calculate YTD taxable income based on the original values
+        ytd_taxable_income = (annual_income - (annual_income * super_rate)) * original_fortnights_since_fy_start / 26  
         fortnightly_tax = calculate_tax(ytd_taxable_income)
-        # ... etc ...
+        fortnightly_super = fortnightly_gross * super_rate # define this before being used
+        fortnightly_net = fortnightly_gross - fortnightly_tax - fortnightly_super
+
         # Calculate YTD totals for display
-        ytd_gross = fortnightly_gross * fortnights_since_fy_start
+        ytd_gross = fortnightly_gross * original_fortnights_since_fy_start
         ytd_tax = calculate_tax(ytd_gross)
         ytd_super = ytd_gross * super_rate
-
 
         # --- Detailed PDF Content Generation for ONE Payslip ---
         pdf.add_page()
@@ -131,15 +130,15 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
 
         # Update Dates for Next Payslip in the Loop
         pay_period_end -= timedelta(days=14)
-        fortnights_since_fy_start -= 1
+        original_fortnights_since_fy_start -= 1 # decrement the original one
 
-
-    return pdf # Return the FPDF object after generating all payslips
-
+    pdf.close() # explicitly close the PDF 
+    return pdf  
 
 
 # --- Main Application ---
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=True)
+
 
 
