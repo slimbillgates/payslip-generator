@@ -58,13 +58,14 @@ def payslip_form():
 # --- Payslip Generation Function ---
 
 def generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income):
-    super_rate = 0.11  
+    super_rate = 0.11
     today = date.today()
     financial_year_start = date(today.year - 1, 7, 1)
     pay_period_end = today - timedelta(days=today.weekday() + 1)  
     original_fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1
 
     pdf = FPDF()  
+    pdf.set_margins(20, 15, 20) # Set margins for the document
 
     # --- Loop to Generate Multiple Payslips ---
     for _ in range(num_payslips):
@@ -72,9 +73,9 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
 
         # Calculations (same as before)
         fortnightly_gross = annual_income / 26
-        ytd_taxable_income = (annual_income - (annual_income * super_rate)) * original_fortnights_since_fy_start / 26  
+        ytd_taxable_income = (annual_income - (annual_income * super_rate)) * original_fortnights_since_fy_start / 26
         fortnightly_tax = calculate_tax(ytd_taxable_income)
-        fortnightly_super = fortnightly_gross * super_rate # define this before being used
+        fortnightly_super = fortnightly_gross * super_rate
         fortnightly_net = fortnightly_gross - fortnightly_tax - fortnightly_super
 
         # Calculate YTD totals for display
@@ -85,21 +86,73 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
 
         # --- Detailed PDF Content Generation for ONE Payslip ---
         pdf.add_page()
+        
+        # Header
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, f"Payslip for {first_name} {last_name}", ln=True, align="C")
-        # ... rest of your PDF content generation...
+        pdf.set_font("Arial", "", 10)
 
+        # Business Details (with line breaks for clarity)
+        pdf.cell(0, 5, f"{business_name}", ln=True, align="C")
+        pdf.cell(0, 5, f"ABN: {abn}", ln=True, align="C")
+        pdf.cell(0, 5, address, ln=True, align="C")
+        pdf.ln(10)  # Add spacing
 
-        # Update Dates for Next Payslip in the Loop
+        # Pay Period and Date Paid
+        pdf.cell(0, 10, f"Pay Period: {pay_period_start:%d/%m/%Y} - {pay_period_end:%d/%m/%Y}", ln=True)
+        pdf.cell(0, 10, f"Date Paid: {pay_period_end + timedelta(days=1):%d/%m/%Y}", ln=True)
+        pdf.ln(10)
+
+        # Earnings and Deductions Table
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(95, 8, "Earnings", border=1, align="C")
+        pdf.cell(95, 8, "Deductions", border=1, align="C", ln=1)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(95, 8, "Description", border=1, align="C")
+        pdf.cell(95, 8, "Amount", border=1, align="C", ln=1)
+        pdf.cell(95, 8, "Gross Pay", border=1)
+        pdf.cell(95, 8, f"${fortnightly_gross:.2f}", border=1, ln=1)
+        pdf.cell(95, 8, "Tax", border=1)
+        pdf.cell(95, 8, f"${fortnightly_tax:.2f}", border=1, ln=1)
+        pdf.cell(95, 8, "Superannuation", border=1)
+        pdf.cell(95, 8, f"${fortnightly_super:.2f}", border=1, ln=1)
+
+        # Total Earnings and Deductions
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(95, 8, "Total Earnings", border=1, align="C")
+        pdf.cell(95, 8, f"${fortnightly_gross:.2f}", border=1, align="C", ln=1)
+        pdf.cell(95, 8, "Total Deductions", border=1, align="C")
+        pdf.cell(95, 8, f"${fortnightly_tax + fortnightly_super:.2f}", border=1, align="C", ln=1)
+        pdf.ln(10)
+
+        # YTD Totals
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(0, 8, "Year-To-Date Totals:", ln=True)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(95, 8, "YTD Gross:", border=1)
+        pdf.cell(95, 8, f"${ytd_gross:.2f}", border=1, ln=1)
+        pdf.cell(95, 8, "YTD Tax:", border=1)
+        pdf.cell(95, 8, f"${ytd_tax:.2f}", border=1, ln=1)
+        pdf.cell(95, 8, "YTD Super:", border=1)
+        pdf.cell(95, 8, f"${ytd_super:.2f}", border=1, ln=1)
+
+        # Net Pay
+        pdf.ln(10)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(95, 10, "Net Pay:", border=1)
+        pdf.cell(95, 10, f"${fortnightly_net:.2f}", border=1, ln=1)
+
+        # Update for next pay period
         pay_period_end -= timedelta(days=14)
-        original_fortnights_since_fy_start -= 1 # decrement the original one
-
-    return pdf  # Return the FPDF object after generating all payslips
-
+        original_fortnights_since_fy_start -= 1
+    
+    return pdf 
 
 
 # --- Main Application ---
 if __name__ == '__main__':
     app.run(debug=True)
+
+
 
 
