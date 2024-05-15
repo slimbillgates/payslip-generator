@@ -6,6 +6,7 @@ from fpdf import FPDF
 # --- Tax Calculation Function ---
 
 def calculate_tax(income):
+    """Calculates income tax based on Australian tax brackets (2023-2024)."""
     if 0 <= income <= 18200:
         return 0
     elif 18201 <= income <= 45000:
@@ -34,23 +35,24 @@ def payslip_form():
             address = request.form['address']
             annual_income = float(request.form['annual_income'])
 
-            pdf_data = generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income)
+            # Generate PDF
+            pdf = generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income)
             
-            # Output PDF to bytes
+            # Output to in-memory bytes buffer
             pdf_bytes = io.BytesIO()
-            pdf_data.output(pdf_bytes, dest='S')
-            pdf_bytes.seek(0)
+            pdf.output(pdf_bytes, dest='S')
+            pdf_bytes.seek(0)  # Reset file pointer for reading
 
+            # Send PDF with appropriate headers
             filename = f"payslips_{date.today():%Y-%m-%d}.pdf"
-            response = send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name=filename)
-            response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response = send_file(pdf_bytes, download_name=filename, as_attachment=True)
+            response.headers["Content-Type"] = "application/pdf" 
 
             return response
+        except Exception as e:
+            return f"Error generating payslip(s): {str(e)}", 500  # Return error message
 
-        except Exception as e:  # Add error handling
-            return f"Error generating PDF: {str(e)}", 500
-
-    return render_template('payslip_form.html')  # Render the form
+    return render_template('payslip_form.html')  # Render the form for GET requests
 
 
 # --- Payslip Generation Function ---
@@ -59,23 +61,25 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
     super_rate = 0.11  
     today = date.today()
     financial_year_start = date(today.year - 1, 7, 1)
-    pay_period_end = today - timedelta(days=today.weekday() + 1) 
-    fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1
+    pay_period_end = today - timedelta(days=today.weekday() + 1)  # End of the most recent pay period (Sunday)
+    fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1  # Fortnights elapsed in the financial year
 
     pdf = FPDF()  
 
     # --- Loop to Generate Multiple Payslips ---
     for _ in range(num_payslips):
-        pay_period_start = pay_period_end - timedelta(days=13)
+        pay_period_start = pay_period_end - timedelta(days=13)  # Start of this pay period
+
+        # Calculations (same as before)
         fortnightly_gross = annual_income / 26
         ytd_taxable_income = (annual_income - (annual_income * super_rate)) * fortnights_since_fy_start / 26
         fortnightly_tax = calculate_tax(ytd_taxable_income)
-        fortnightly_super = fortnightly_gross * super_rate
-        fortnightly_net = fortnightly_gross - fortnightly_tax - fortnightly_super
-
+        # ... etc ...
+        # Calculate YTD totals for display
         ytd_gross = fortnightly_gross * fortnights_since_fy_start
         ytd_tax = calculate_tax(ytd_gross)
         ytd_super = ytd_gross * super_rate
+
 
         # --- Detailed PDF Content Generation for ONE Payslip ---
         pdf.add_page()
@@ -130,11 +134,12 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
         fortnights_since_fy_start -= 1
 
 
-    return pdf # Return the FPDF object after all payslips are generated
+    return pdf # Return the FPDF object after generating all payslips
+
 
 
 # --- Main Application ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True) 
 
 
