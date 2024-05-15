@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payslip Generator</title>
+</head>
+<body>
+    <h1>Payslip Generator</h1>
+
+    <form method="POST">
+        Number of Fortnights: <input type="number" name="num_payslips" min="1" value="1"><br>
+        First Name: <input type="text" name="first_name" required><br>
+        Last Name: <input type="text" name="last_name" required><br>
+        Business Name: <input type="text" name="business_name" required><br>
+        ABN: <input type="text" name="abn" required><br>
+        Address: <textarea name="address" required></textarea><br>
+        Average Yearly Income: <input type="number" name="annual_income" required><br>
+        <input type="submit" value="Generate Payslips">
+    </form>
+</body>
+</html>
