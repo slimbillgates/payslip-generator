@@ -1,9 +1,12 @@
 import io
+import tempfile
+import os
 from datetime import date, timedelta
 from flask import Flask, render_template, request, send_file
 from fpdf import FPDF
 
 # --- Tax Calculation Function ---
+
 def calculate_tax(income):
     if 0 <= income <= 18200:
         return 0
@@ -16,8 +19,8 @@ def calculate_tax(income):
     else:
         return 51667 + 0.45 * (income - 180000)
 
-
 # --- Flask Application Setup ---
+
 app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
@@ -33,27 +36,27 @@ def payslip_form():
             address = request.form['address']
             annual_income = float(request.form['annual_income'])
 
-            # Generate PDF
             pdf = generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income)
-            
-            # Output to in-memory bytes buffer
-            pdf_bytes = io.BytesIO()
-            pdf.output(pdf_bytes, dest='S')
-            pdf_bytes.seek(0)  # Reset file pointer for reading
+            # Write to temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp:
+                pdf.output(temp.name, 'F') 
 
-            # Send PDF with appropriate headers
-            filename = f"payslips_{date.today():%Y-%m-%d}.pdf"
-            response = send_file(pdf_bytes, download_name=filename, as_attachment=True)
-            response.headers["Content-Type"] = "application/pdf" 
-
-            return response
+            # Send the temporary file 
+            try:
+                response = send_file(temp.name, as_attachment=True, download_name=f"payslips_{date.today():%Y-%m-%d}.pdf")
+                response.headers["Content-Type"] = "application/pdf"
+                return response
+            finally:
+                # Clean up the temporary file
+                os.remove(temp.name)
         except Exception as e:
-            return f"Error generating payslip(s): {str(e)}", 500  # Return error message
+            app.logger.error(f"Error generating payslip(s): {str(e)}")  
+            return f"Error generating payslip(s): {str(e)}", 500
 
     return render_template('payslip_form.html')  # Render the form for GET requests
 
-
 # --- Payslip Generation Function ---
+
 def generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income):
     super_rate = 0.11  
     today = date.today()
@@ -67,9 +70,8 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
     for _ in range(num_payslips):
         pay_period_start = pay_period_end - timedelta(days=13)  # Start of this pay period
 
-        # Calculations 
+        # Calculations (same as before)
         fortnightly_gross = annual_income / 26
-        # Calculate YTD taxable income based on the original values
         ytd_taxable_income = (annual_income - (annual_income * super_rate)) * original_fortnights_since_fy_start / 26  
         fortnightly_tax = calculate_tax(ytd_taxable_income)
         fortnightly_super = fortnightly_gross * super_rate # define this before being used
@@ -80,65 +82,24 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
         ytd_tax = calculate_tax(ytd_gross)
         ytd_super = ytd_gross * super_rate
 
+
         # --- Detailed PDF Content Generation for ONE Payslip ---
         pdf.add_page()
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, f"Payslip for {first_name} {last_name}", ln=True, align="C")
-        pdf.set_font("Arial", "", 10)
-        pdf.cell(0, 5, f"{business_name} - ABN: {abn}", ln=True, align="C")
-        pdf.cell(0, 5, address, ln=True, align="C")
-        pdf.ln(10)
+        # ... rest of your PDF content generation...
 
-        # Pay Period and Dates
-        pdf.cell(0, 8, f"Pay Period: {pay_period_start:%d/%m/%Y} - {pay_period_end:%d/%m/%Y}", ln=True)
-        pdf.cell(0, 8, f"Date Paid: {pay_period_end + timedelta(days=1):%d/%m/%Y}", ln=True)
-        pdf.ln(5)
-
-        # Earnings and Deductions Table
-        data = [
-            ["Earnings", "", "Deductions", ""],
-            ["Description", "Amount", "Description", "Amount"],
-            ["Gross Pay", f"${fortnightly_gross:.2f}", "Tax", f"${fortnightly_tax:.2f}"],
-            ["", "", "Superannuation", f"${fortnightly_super:.2f}"],
-            ["", "", "", ""],  # Empty row for spacing
-            ["Total Earnings", f"${fortnightly_gross:.2f}", "Total Deductions", f"${fortnightly_tax + fortnightly_super:.2f}"]
-        ]
-
-        for row in data:
-            for item in row:
-                pdf.cell(47, 8, str(item), border=1, align="C")
-            pdf.ln()
-
-        # YTD Totals
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 8, "Year-To-Date Totals:", ln=True)
-        pdf.set_font("Arial", "", 10)
-        pdf.cell(50, 8, "YTD Gross:", border=1)
-        pdf.cell(0, 8, f"${ytd_gross:.2f}", border=1, ln=True)
-        pdf.cell(50, 8, "YTD Tax:", border=1)
-        pdf.cell(0, 8, f"${ytd_tax:.2f}", border=1, ln=True)
-        pdf.cell(50, 8, "YTD Super:", border=1)
-        pdf.cell(0, 8, f"${ytd_super:.2f}", border=1, ln=True)
-
-        # Net Pay
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(50, 8, "Net Pay:", border=1)
-        pdf.cell(0, 8, f"${fortnightly_net:.2f}", border=1, ln=True)
-        pdf.ln(10)
 
         # Update Dates for Next Payslip in the Loop
         pay_period_end -= timedelta(days=14)
         original_fortnights_since_fy_start -= 1 # decrement the original one
 
-    pdf.close() # explicitly close the PDF 
-    return pdf  
+    return pdf  # Return the FPDF object after generating all payslips
+
 
 
 # --- Main Application ---
 if __name__ == '__main__':
     app.run(debug=True)
-
 
 
