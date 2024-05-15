@@ -121,6 +121,8 @@ def generate_payslips(num_payslips, first_name, last_name, business_name, abn, a
         # Save to desktop
         pay_period_end -= timedelta(days=14)
         fortnights_since_fy_start -= 1
+        return pdf
+
 
 
 if __name__ == '__main__':
