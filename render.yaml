@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: payslip-generator  # Choose a suitable name
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
