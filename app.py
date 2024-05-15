@@ -1,6 +1,6 @@
 import os
-import sys
 from datetime import date, timedelta
+from flask import Flask, render_template, request, send_file
 from fpdf import FPDF
 
 def calculate_tax(income):
@@ -16,29 +16,44 @@ def calculate_tax(income):
     else:
         return 51667 + 0.45 * (income - 180000)
 
-def generate_payslips():
-    # Check if number of payslips is provided as argument, otherwise prompt
-    if len(sys.argv) >= 2:
-        num_payslips = int(sys.argv[1])
-    else:
-        num_payslips = int(input("How many fortnights of payslips: "))
+app = Flask(__name__)
 
-    # Rest of the input prompts
-    first_name = input("First Name: ")
-    last_name = input("Last Name: ")
-    business_name = input("Business Name: ")
-    abn = input("ABN: ")
-    address = input("Address: ")
-    annual_income = float(input("Average Yearly Income: "))
+@app.route('/', methods=['GET', 'POST'])
+def payslip_form():
+    if request.method == 'POST':
+        num_payslips = int(request.form['num_payslips'])
+        first_name = request.form['first_name']
+        last_name = request.form['last_name']
+        business_name = request.form['business_name']
+        abn = request.form['abn']
+        address = request.form['address']
+        annual_income = float(request.form['annual_income'])
+
+        pdf_data = generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income)
+        pdf_bytes = pdf_data.output(dest='S')
+        
+        # Use a unique filename to prevent caching issues
+        filename = f"payslips_{date.today():%Y-%m-%d}.pdf" 
+        
+        response = send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+        # Add a Content-Disposition header to trigger the download
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
+
+    return render_template('payslip_form.html')
+
+
+def generate_payslips(num_payslips, first_name, last_name, business_name, abn, address, annual_income):
     super_rate = 0.11  # 11% superannuation
-
     today = date.today()
-    financial_year_start = date(today.year - 1, 7, 1)  # Start of the financial year
-    pay_period_end = today - timedelta(days=today.weekday() + 1)  # Previous Sunday
+    financial_year_start = date(today.year - 1, 7, 1)
+    pay_period_end = today - timedelta(days=today.weekday() + 1)
 
     fortnights_since_fy_start = (pay_period_end - financial_year_start).days // 14 + 1
 
-    desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+    pdf = FPDF()  # Create a single PDF for all payslips
 
     for i in range(num_payslips):
         pay_period_start = pay_period_end - timedelta(days=13)
@@ -52,13 +67,12 @@ def generate_payslips():
         ytd_tax = calculate_tax(ytd_gross)
         ytd_super = ytd_gross * super_rate
 
-        # Create PDF
-        pdf = FPDF()
+        # Create PDF (modify to match your desired format)
         pdf.add_page()
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("Arial", size=10)  
 
         # Header
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font("Arial", "B", 12) 
         pdf.cell(0, 10, f"Payslip for {first_name} {last_name}", ln=True, align="C")
         pdf.set_font("Arial", size=10)
         pdf.cell(0, 5, f"{business_name} - ABN: {abn}", ln=True, align="C")
@@ -77,7 +91,7 @@ def generate_payslips():
             ["Description", "Amount", "Description", "Amount"],
             ["Gross Pay", f"${fortnightly_gross:.2f}", "Tax", f"${fortnightly_tax:.2f}"],
             ["", "", "Superannuation", f"${fortnightly_super:.2f}"],
-            ["", "", "", ""],
+            ["", "", "", ""], 
             ["Total Earnings", f"${fortnightly_gross:.2f}", "Total Deductions", f"${fortnightly_tax + fortnightly_super:.2f}"]
         ]
 
@@ -88,7 +102,7 @@ def generate_payslips():
 
         # YTD Totals
         pdf.ln(5)
-        pdf.set_font("Arial", "B", 10)
+        pdf.set_font("Arial", "B", 10)  
         pdf.cell(0, 8, "Year-To-Date Totals:", ln=True, align="L")
         pdf.set_font("Arial", size=10)
         pdf.cell(50, 8, "YTD Gross:", border=1, align="L")
@@ -104,10 +118,14 @@ def generate_payslips():
         pdf.cell(50, 8, "Net Pay:", border=1, align="L")
         pdf.cell(0, 8, f"${fortnightly_net:.2f}", border=1, ln=True, align="L")
 
-        pdf.output(os.path.join(desktop_path, f"payslip_{i+1}.pdf"))  # Save to desktop
-
+        # Save to desktop
         pay_period_end -= timedelta(days=14)
         fortnights_since_fy_start -= 1
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
 
 
 if __name__ == "__main__":  # This is the main block where execution starts
