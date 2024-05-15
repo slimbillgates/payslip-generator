@@ -127,6 +127,3 @@ if __name__ == '__main__':
     app.run(debug=True)
 
 
-
-if __name__ == "__main__":  # This is the main block where execution starts
-    generate_payslips()  # Now the function is called within the main block
